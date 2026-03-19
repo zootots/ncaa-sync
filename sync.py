@@ -2,26 +2,39 @@ import json
 import os
 import urllib.request
 import urllib.error
+import base64
 import re
 import time
 import sys
 
 ANTHROPIC_KEY = os.environ["ANTHROPIC_API_KEY"]
-NPOINT_ID     = os.environ["NPOINT_ID"]
-NPOINT_URL    = f"https://api.npoint.io/{NPOINT_ID}"
+GITHUB_TOKEN  = os.environ["GITHUB_TOKEN"]
+GITHUB_REPO   = os.environ["GITHUB_REPOSITORY"]   # e.g. "yourname/ncaa-sync"
+DATA_FILE     = "pool_data.json"
+API_BASE      = f"https://api.github.com/repos/{GITHUB_REPO}/contents/{DATA_FILE}"
 
-# ── 1. Load current state from npoint ───────────────────────────────────────
+HEADERS_GH = {
+    "Authorization": f"Bearer {GITHUB_TOKEN}",
+    "Accept": "application/vnd.github+json",
+    "X-GitHub-Api-Version": "2022-11-28"
+}
 
-print("Loading current pool state from npoint.io...")
+# ── 1. Load current state from GitHub repo ───────────────────────────────────
+
+print("Loading pool_data.json from GitHub repo...")
+req = urllib.request.Request(API_BASE, headers=HEADERS_GH)
 try:
-    with urllib.request.urlopen(NPOINT_URL) as resp:
-        state = json.loads(resp.read())
+    with urllib.request.urlopen(req) as resp:
+        meta = json.loads(resp.read())
+        content_b64 = meta["content"].replace("\n", "")
+        file_sha = meta["sha"]
+        state = json.loads(base64.b64decode(content_b64))
         print(f"  Loaded. Eliminated so far: {len(state.get('eliminatedTeams', []))} teams")
 except urllib.error.HTTPError as e:
-    print(f"ERROR loading from npoint: HTTP {e.code} {e.read().decode()}")
+    print(f"ERROR loading from GitHub: HTTP {e.code} {e.read().decode()}")
     sys.exit(1)
 except Exception as e:
-    print(f"ERROR loading from npoint: {e}")
+    print(f"ERROR loading from GitHub: {e}")
     sys.exit(1)
 
 # ── 2. Build list of active assigned teams ───────────────────────────────────
@@ -34,7 +47,7 @@ for p in state.get("participants", []):
             all_assigned.append(t)
 
 if not all_assigned:
-    print("No active teams left to check. Pool may be over.")
+    print("No active teams left. Pool may be over.")
     sys.exit(0)
 
 print(f"  Active teams to check: {', '.join(all_assigned)}")
@@ -99,7 +112,7 @@ print(f"Games found: {parsed.get('games_found', 'unknown')}")
 print(f"Newly eliminated: {newly_eliminated if newly_eliminated else 'none'}")
 
 if not newly_eliminated:
-    print("\nNo new eliminations. npoint not updated.")
+    print("\nNo new eliminations. Repo not updated.")
     sys.exit(0)
 
 # ── 5. Update state ──────────────────────────────────────────────────────────
@@ -122,25 +135,28 @@ if not state.get("firstEliminated"):
             print(f"  {p['name']} is first eliminated — consolation prize!")
             break
 
-# ── 6. Save updated state to npoint ─────────────────────────────────────────
+# ── 6. Write updated pool_data.json back to GitHub repo ─────────────────────
 
-print(f"\nSaving updated state to npoint.io ({len(newly_eliminated)} new elimination(s))...")
-payload = json.dumps(state).encode()
+print(f"\nWriting updated pool_data.json to repo ({len(newly_eliminated)} new elimination(s))...")
+new_content = base64.b64encode(json.dumps(state, indent=2).encode()).decode()
+payload = json.dumps({
+    "message": f"Auto-sync: eliminate {', '.join(newly_eliminated)}",
+    "content": new_content,
+    "sha": file_sha
+}).encode()
+
 req = urllib.request.Request(
-    NPOINT_URL,
+    API_BASE,
     data=payload,
-    method="POST",
-    headers={"Content-Type": "application/json"}
+    method="PUT",
+    headers={**HEADERS_GH, "Content-Type": "application/json"}
 )
 try:
     with urllib.request.urlopen(req) as resp:
         print("  Saved successfully.")
         print(f"  Newly eliminated: {', '.join(newly_eliminated)}")
 except urllib.error.HTTPError as e:
-    print(f"ERROR saving to npoint: HTTP {e.code} {e.read().decode()}")
-    sys.exit(1)
-except Exception as e:
-    print(f"ERROR saving to npoint: {e}")
+    print(f"ERROR writing to GitHub: {e.code} {e.read().decode()}")
     sys.exit(1)
 
 print("\nSync complete.")
