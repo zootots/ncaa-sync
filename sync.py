@@ -55,25 +55,39 @@ print(f"  Active teams to check: {', '.join(all_assigned)}")
 # ── 3. Ask Claude (with web search) for eliminated teams ─────────────────────
 
 print("\nAsking Claude for latest tournament results...")
-prompt = (
-    "You are helping track a March Madness pool. Today is March 2026.\n\n"
-    "The 2026 NCAA Men's Basketball Tournament is currently in progress. "
-    "Using web search, find all teams that have been ELIMINATED (i.e. LOST a game) "
-    "so far, including the First Four.\n\n"
-    "From this list of teams still active in my pool, tell me which ones have been eliminated:\n"
-    + ", ".join(all_assigned) + "\n\n"
-    "IMPORTANT: Only list teams that have definitively LOST. "
-    "Do NOT include teams that won or have not played. Do NOT make up results.\n\n"
-    "Respond ONLY with valid JSON, no markdown, no explanation:\n"
-    '{"eliminated": ["TeamA", "TeamB"], "games_found": 5, "note": "brief summary"}\n\n'
-    "Team names must match exactly as given in my list above."
+
+# Static system prompt — eligible for prompt caching (does not change between runs)
+system_prompt = (
+    "You are helping track a March Madness pool. "
+    "The 2026 NCAA Men's Basketball Tournament is in progress. "
+    "When given a list of active teams, use web search to find which ones have been "
+    "ELIMINATED (i.e. lost a game) so far, including the First Four. "
+    "Only list teams that have definitively lost. Do NOT include teams that won or "
+    "have not played. Do NOT make up results. "
+    "Respond ONLY with valid JSON, no markdown, no explanation: "
+    '{"eliminated": ["TeamA", "TeamB"], "games_found": 5, "note": "brief summary"}. '
+    "Team names in your response must match exactly as given by the user."
+)
+
+# Dynamic user message — just the changing team list
+user_message = (
+    "Today is March 2026. Which of these active pool teams have been eliminated "
+    "from the 2026 NCAA Tournament so far?\n\n"
+    + ", ".join(all_assigned)
 )
 
 payload = json.dumps({
-    "model": "claude-sonnet-4-20250514",
-    "max_tokens": 1000,
+    "model": "claude-haiku-4-5-20251001",
+    "max_tokens": 500,
+    "system": [
+        {
+            "type": "text",
+            "text": system_prompt,
+            "cache_control": {"type": "ephemeral"}
+        }
+    ],
     "tools": [{"type": "web_search_20250305", "name": "web_search"}],
-    "messages": [{"role": "user", "content": prompt}]
+    "messages": [{"role": "user", "content": user_message}]
 }).encode()
 
 req = urllib.request.Request(
@@ -82,7 +96,8 @@ req = urllib.request.Request(
     headers={
         "Content-Type": "application/json",
         "x-api-key": ANTHROPIC_KEY,
-        "anthropic-version": "2023-06-01"
+        "anthropic-version": "2023-06-01",
+        "anthropic-beta": "prompt-caching-2024-07-31"
     }
 )
 try:
