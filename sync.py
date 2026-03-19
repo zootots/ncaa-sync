@@ -15,13 +15,23 @@ JSONBIN_ID    = os.environ["JSONBIN_BIN_ID"]
 print("Loading current pool state from JSONBin...")
 req = urllib.request.Request(
     f"https://api.jsonbin.io/v3/b/{JSONBIN_ID}/latest",
-    headers={"X-Master-Key": JSONBIN_KEY}
+    headers={
+        "X-Master-Key": JSONBIN_KEY,
+        "X-Access-Key": JSONBIN_KEY
+    }
 )
 try:
     with urllib.request.urlopen(req) as resp:
         data = json.loads(resp.read())
         state = data["record"]
         print(f"  Loaded. Eliminated so far: {len(state.get('eliminatedTeams', []))} teams")
+except urllib.error.HTTPError as e:
+    body = e.read().decode()
+    print(f"ERROR loading from JSONBin: HTTP {e.code} {e.reason}")
+    print(f"  Response body: {body}")
+    print(f"  Bin ID used: '{JSONBIN_ID}'")
+    print(f"  Key prefix: '{JSONBIN_KEY[:12]}...'")
+    sys.exit(1)
 except Exception as e:
     print(f"ERROR loading from JSONBin: {e}")
     sys.exit(1)
