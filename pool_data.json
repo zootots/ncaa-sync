@@ -1,15 +1,118 @@
 {
   "participants": [
-    {"name": "Merrianne", "teams": ["Wisconsin","Purdue","Arizona","Georgia","Illinois","TCU","UMBC","Iowa","VCU","Howard"]},
-    {"name": "Janice",    "teams": ["Texas Tech","Houston","Virginia","Florida","Nebraska","Idaho","Prairie View A&M","Northern Iowa","Siena","Penn"]},
-    {"name": "Cindy",     "teams": ["Kentucky","Duke","Saint Mary's","St. John's","Ohio State","Lehigh","Missouri","NC State","McNeese","Troy"]},
-    {"name": "Lou Ann",   "teams": ["Clemson","UCLA","BYU","Villanova","Iowa State","Hofstra","South Florida","SMU","Wright State","Hawaii"]},
-    {"name": "Jeanne",    "teams": ["Saint Louis","Michigan","Utah State","Louisville","Miami (FL)","Queens","High Point","Texas","Tennessee State","Kennesaw State"]},
-    {"name": "Tina",      "teams": ["UConn","Vanderbilt","Tennessee","Gonzaga","Sorry","LIU","North Dakota State","Texas A&M","Furman","Miami (OH)"]},
-    {"name": "Pam",       "teams": ["Michigan State","North Carolina","Arkansas","Kansas","Alabama","Akron","Santa Clara","UCF","Cal Baptist","Sorry"]}
+    {
+      "name": "Merrianne",
+      "teams": [
+        "Wisconsin",
+        "Purdue",
+        "Arizona",
+        "Georgia",
+        "Illinois",
+        "TCU",
+        "UMBC",
+        "Iowa",
+        "VCU",
+        "Howard"
+      ]
+    },
+    {
+      "name": "Janice",
+      "teams": [
+        "Texas Tech",
+        "Houston",
+        "Virginia",
+        "Florida",
+        "Nebraska",
+        "Idaho",
+        "Prairie View A&M",
+        "Northern Iowa",
+        "Siena",
+        "Penn"
+      ]
+    },
+    {
+      "name": "Cindy",
+      "teams": [
+        "Kentucky",
+        "Duke",
+        "Saint Mary's",
+        "St. John's",
+        "Ohio State",
+        "Lehigh",
+        "Missouri",
+        "NC State",
+        "McNeese",
+        "Troy"
+      ]
+    },
+    {
+      "name": "Lou Ann",
+      "teams": [
+        "Clemson",
+        "UCLA",
+        "BYU",
+        "Villanova",
+        "Iowa State",
+        "Hofstra",
+        "South Florida",
+        "SMU",
+        "Wright State",
+        "Hawaii"
+      ]
+    },
+    {
+      "name": "Jeanne",
+      "teams": [
+        "Saint Louis",
+        "Michigan",
+        "Utah State",
+        "Louisville",
+        "Miami (FL)",
+        "Queens",
+        "High Point",
+        "Texas",
+        "Tennessee State",
+        "Kennesaw State"
+      ]
+    },
+    {
+      "name": "Tina",
+      "teams": [
+        "UConn",
+        "Vanderbilt",
+        "Tennessee",
+        "Gonzaga",
+        "Sorry",
+        "LIU",
+        "North Dakota State",
+        "Texas A&M",
+        "Furman",
+        "Miami (OH)"
+      ]
+    },
+    {
+      "name": "Pam",
+      "teams": [
+        "Michigan State",
+        "North Carolina",
+        "Arkansas",
+        "Kansas",
+        "Alabama",
+        "Akron",
+        "Santa Clara",
+        "UCF",
+        "Cal Baptist",
+        "Sorry"
+      ]
+    }
   ],
-  "eliminatedTeams": [],
-  "gamesPlayed": 0,
+  "eliminatedTeams": [
+    "UMBC",
+    "NC State",
+    "Lehigh",
+    "SMU"
+  ],
+  "gamesPlayed": 4,
   "firstEliminated": null,
-  "lastSync": null
+  "lastSync": "2026-03-19T16:10:01Z"
 }
