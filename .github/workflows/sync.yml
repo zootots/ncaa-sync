@@ -16,6 +16,5 @@ jobs:
       - name: Run sync script
         env:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
-          JSONBIN_KEY: ${{ secrets.JSONBIN_KEY }}
-          JSONBIN_BIN_ID: ${{ secrets.JSONBIN_BIN_ID }}
+          NPOINT_ID: ${{ secrets.NPOINT_ID }}
         run: python3 sync.py
