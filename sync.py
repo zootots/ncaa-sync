@@ -3,13 +3,11 @@ import os
 import urllib.request
 import urllib.error
 import base64
-import re
 import time
 import sys
 
-ANTHROPIC_KEY = os.environ["ANTHROPIC_API_KEY"]
 GITHUB_TOKEN  = os.environ["GITHUB_TOKEN"]
-GITHUB_REPO   = os.environ["GITHUB_REPOSITORY"]   # e.g. "yourname/ncaa-sync"
+GITHUB_REPO   = os.environ["GITHUB_REPOSITORY"]
 DATA_FILE     = "pool_data.json"
 API_BASE      = f"https://api.github.com/repos/{GITHUB_REPO}/contents/{DATA_FILE}"
 
@@ -17,6 +15,79 @@ HEADERS_GH = {
     "Authorization": f"Bearer {GITHUB_TOKEN}",
     "Accept": "application/vnd.github+json",
     "X-GitHub-Api-Version": "2022-11-28"
+}
+
+# ESPN team name → pool team name mapping
+# ESPN uses full official names; map them to whatever is in pool_data.json
+ESPN_NAME_MAP = {
+    "Duke Blue Devils": "Duke",
+    "Arizona Wildcats": "Arizona",
+    "Michigan Wolverines": "Michigan",
+    "Florida Gators": "Florida",
+    "Houston Cougars": "Houston",
+    "Connecticut Huskies": "UConn",
+    "Iowa State Cyclones": "Iowa State",
+    "Purdue Boilermakers": "Purdue",
+    "Michigan State Spartans": "Michigan State",
+    "Illinois Fighting Illini": "Illinois",
+    "Gonzaga Bulldogs": "Gonzaga",
+    "Virginia Cavaliers": "Virginia",
+    "Nebraska Cornhuskers": "Nebraska",
+    "Alabama Crimson Tide": "Alabama",
+    "Kansas Jayhawks": "Kansas",
+    "Arkansas Razorbacks": "Arkansas",
+    "Vanderbilt Commodores": "Vanderbilt",
+    "St. John's Red Storm": "St. John's",
+    "Texas Tech Red Raiders": "Texas Tech",
+    "Wisconsin Badgers": "Wisconsin",
+    "Tennessee Volunteers": "Tennessee",
+    "North Carolina Tar Heels": "North Carolina",
+    "Louisville Cardinals": "Louisville",
+    "BYU Cougars": "BYU",
+    "Kentucky Wildcats": "Kentucky",
+    "Saint Mary's Gaels": "Saint Mary's",
+    "Miami Hurricanes": "Miami (FL)",
+    "UCLA Bruins": "UCLA",
+    "Clemson Tigers": "Clemson",
+    "Villanova Wildcats": "Villanova",
+    "Ohio State Buckeyes": "Ohio State",
+    "Georgia Bulldogs": "Georgia",
+    "Utah State Aggies": "Utah State",
+    "TCU Horned Frogs": "TCU",
+    "Saint Louis Billikens": "Saint Louis",
+    "Iowa Hawkeyes": "Iowa",
+    "Santa Clara Broncos": "Santa Clara",
+    "UCF Knights": "UCF",
+    "Missouri Tigers": "Missouri",
+    "Texas A&M Aggies": "Texas A&M",
+    "NC State Wolfpack": "NC State",
+    "Texas Longhorns": "Texas",
+    "SMU Mustangs": "SMU",
+    "Miami RedHawks": "Miami (OH)",
+    "VCU Rams": "VCU",
+    "South Florida Bulls": "South Florida",
+    "McNeese Cowboys": "McNeese",
+    "Akron Zips": "Akron",
+    "Northern Iowa Panthers": "Northern Iowa",
+    "High Point Panthers": "High Point",
+    "California Baptist Lancers": "Cal Baptist",
+    "Hofstra Pride": "Hofstra",
+    "Troy Trojans": "Troy",
+    "Hawaii Rainbow Warriors": "Hawaii",
+    "North Dakota State Bison": "North Dakota State",
+    "Penn Quakers": "Penn",
+    "Wright State Raiders": "Wright State",
+    "Kennesaw State Owls": "Kennesaw State",
+    "Tennessee State Tigers": "Tennessee State",
+    "Idaho Vandals": "Idaho",
+    "Furman Paladins": "Furman",
+    "Queens Royals": "Queens",
+    "Siena Saints": "Siena",
+    "LIU Sharks": "LIU",
+    "Howard Bison": "Howard",
+    "UMBC Retrievers": "UMBC",
+    "Lehigh Mountain Hawks": "Lehigh",
+    "Prairie View A&M Panthers": "Prairie View A&M",
 }
 
 # ── 1. Load current state from GitHub repo ───────────────────────────────────
@@ -37,8 +108,6 @@ except Exception as e:
     print(f"ERROR loading from GitHub: {e}")
     sys.exit(1)
 
-# ── 2. Build list of active assigned teams ───────────────────────────────────
-
 eliminated = state.get("eliminatedTeams", [])
 all_assigned = []
 for p in state.get("participants", []):
@@ -52,89 +121,106 @@ if not all_assigned:
 
 print(f"  Active teams to check: {', '.join(all_assigned)}")
 
-# ── 3. Ask Claude (with web search) for eliminated teams ─────────────────────
+# ── 2. Fetch completed NCAA Tournament games from ESPN ───────────────────────
 
-print("\nAsking Claude for latest tournament results...")
+print("\nFetching tournament results from ESPN...")
 
-# Static system prompt — eligible for prompt caching (does not change between runs)
-system_prompt = (
-    "You are helping track a March Madness pool. "
-    "The 2026 NCAA Men's Basketball Tournament is in progress. "
-    "When given a list of active teams, use web search to find which ones have been "
-    "ELIMINATED (i.e. lost a game) so far, including the First Four. "
-    "Only list teams that have definitively lost. Do NOT include teams that won or "
-    "have not played. Do NOT make up results. "
-    "Respond ONLY with valid JSON, no markdown, no explanation: "
-    '{"eliminated": ["TeamA", "TeamB"], "games_found": 5, "note": "brief summary"}. '
-    "Team names in your response must match exactly as given by the user."
-)
+# We need to check results across multiple days since the tournament spans weeks.
+# Fetch the scoreboard for a date range by iterating recent dates.
+# ESPN scoreboard returns today's games by default; use dates param for past games.
+# Also fetch the tournament bracket endpoint which has all rounds.
 
-# Dynamic user message — just the changing team list
-user_message = (
-    "Today is March 2026. Which of these active pool teams have been eliminated "
-    "from the 2026 NCAA Tournament so far?\n\n"
-    + ", ".join(all_assigned)
-)
+newly_eliminated = []
+games_found = 0
 
-payload = json.dumps({
-    "model": "claude-haiku-4-5-20251001",
-    "max_tokens": 500,
-    "system": [
-        {
-            "type": "text",
-            "text": system_prompt,
-            "cache_control": {"type": "ephemeral"}
-        }
-    ],
-    "tools": [{"type": "web_search_20250305", "name": "web_search"}],
-    "messages": [{"role": "user", "content": user_message}]
-}).encode()
+def espn_name_to_pool(espn_name):
+    """Convert ESPN team name to pool team name."""
+    # Try direct map first
+    if espn_name in ESPN_NAME_MAP:
+        return ESPN_NAME_MAP[espn_name]
+    # Try partial match against pool names
+    espn_lower = espn_name.lower()
+    for pool_name in all_assigned:
+        if pool_name.lower() in espn_lower or espn_lower in pool_name.lower():
+            return pool_name
+    return None
 
-req = urllib.request.Request(
-    "https://api.anthropic.com/v1/messages",
-    data=payload,
-    headers={
-        "Content-Type": "application/json",
-        "x-api-key": ANTHROPIC_KEY,
-        "anthropic-version": "2023-06-01",
-        "anthropic-beta": "prompt-caching-2024-07-31"
-    }
-)
+def fetch_url(url):
+    req = urllib.request.Request(
+        url,
+        headers={"User-Agent": "Mozilla/5.0 (compatible; ncaa-pool-tracker/1.0)"}
+    )
+    with urllib.request.urlopen(req, timeout=15) as resp:
+        return json.loads(resp.read())
+
+# Use ESPN's tournament bracket API — this contains ALL games across all rounds
 try:
-    with urllib.request.urlopen(req) as resp:
-        result = json.loads(resp.read())
-except urllib.error.HTTPError as e:
-    print(f"ERROR calling Anthropic API: {e.code} {e.read().decode()}")
-    sys.exit(1)
+    bracket_url = "https://site.api.espn.com/apis/v2/sports/basketball/mens-college-basketball/tournament/0"
+    data = fetch_url(bracket_url)
 
-# ── 4. Parse Claude's response ───────────────────────────────────────────────
+    # Walk through all rounds and games
+    for region in data.get("bracket", {}).get("fullBracket", []):
+        for round_data in region.get("rounds", []):
+            for game in round_data.get("competitions", []):
+                status = game.get("status", {}).get("type", {}).get("name", "")
+                if status != "STATUS_FINAL":
+                    continue
+                games_found += 1
+                competitors = game.get("competitors", [])
+                for comp in competitors:
+                    if comp.get("winner") is False:
+                        espn_name = comp.get("team", {}).get("displayName", "")
+                        pool_name = espn_name_to_pool(espn_name)
+                        if pool_name and pool_name not in eliminated and pool_name not in newly_eliminated:
+                            newly_eliminated.append(pool_name)
+                            print(f"  Found eliminated: {pool_name} (ESPN: {espn_name})")
 
-raw = " ".join(b["text"] for b in result.get("content", []) if b.get("type") == "text")
-raw = raw.replace("```json", "").replace("```", "").strip()
-try:
-    parsed = json.loads(raw)
-except Exception:
-    m = re.search(r'\{[\s\S]*\}', raw)
-    if m:
-        parsed = json.loads(m.group())
-    else:
-        print(f"ERROR: Could not parse Claude response:\n{raw}")
-        sys.exit(1)
+    print(f"  Bracket endpoint: {games_found} completed games found")
 
-newly_eliminated = [t for t in parsed.get("eliminated", []) if t not in eliminated]
-print(f"\nClaude says: {parsed.get('note', '')}")
-print(f"Games found: {parsed.get('games_found', 'unknown')}")
-print(f"Newly eliminated: {newly_eliminated if newly_eliminated else 'none'}")
+except Exception as e:
+    print(f"  Bracket endpoint failed ({e}), trying scoreboard fallback...")
+
+    # Fallback: scrape scoreboard for each date since tournament started
+    from datetime import date, timedelta
+    tournament_start = date(2026, 3, 17)
+    today = date.today()
+    check_date = tournament_start
+
+    while check_date <= today:
+        date_str = check_date.strftime("%Y%m%d")
+        try:
+            url = f"https://site.api.espn.com/apis/site/v2/sports/basketball/mens-college-basketball/scoreboard?groups=100&limit=100&dates={date_str}"
+            data = fetch_url(url)
+            for event in data.get("events", []):
+                status = event.get("status", {}).get("type", {}).get("name", "")
+                if status != "STATUS_FINAL":
+                    continue
+                games_found += 1
+                comp = event.get("competitions", [{}])[0]
+                for team in comp.get("competitors", []):
+                    if team.get("winner") is False:
+                        espn_name = team.get("team", {}).get("displayName", "")
+                        pool_name = espn_name_to_pool(espn_name)
+                        if pool_name and pool_name not in eliminated and pool_name not in newly_eliminated:
+                            newly_eliminated.append(pool_name)
+                            print(f"  Found eliminated: {pool_name} (ESPN: {espn_name})")
+        except Exception as de:
+            print(f"  Skipping {date_str}: {de}")
+        check_date += timedelta(days=1)
+        time.sleep(0.3)  # be polite to ESPN's API
+
+    print(f"  Scoreboard fallback: {games_found} completed games across all dates")
+
+print(f"\nNewly eliminated: {newly_eliminated if newly_eliminated else 'none'}")
 
 if not newly_eliminated:
-    print("\nNo new eliminations. Repo not updated.")
+    print("No new eliminations. Repo not updated.")
     sys.exit(0)
 
-# ── 5. Update state ──────────────────────────────────────────────────────────
+# ── 3. Update state ──────────────────────────────────────────────────────────
 
 state["eliminatedTeams"] = eliminated + newly_eliminated
-if parsed.get("games_found"):
-    state["gamesPlayed"] = max(state.get("gamesPlayed", 0), int(parsed["games_found"]))
+state["gamesPlayed"] = max(state.get("gamesPlayed", 0), games_found)
 state["lastSync"] = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
 
 def teams_remaining(p):
@@ -147,10 +233,10 @@ if not state.get("firstEliminated"):
     for p in state["participants"]:
         if teams_remaining(p) == 0 and len(p.get("teams", [])) > 0:
             state["firstEliminated"] = p["name"]
-            print(f"  {p['name']} is first eliminated — consolation prize!")
+            print(f"  {p['name']} is first eliminated!")
             break
 
-# ── 6. Write updated pool_data.json back to GitHub repo ─────────────────────
+# ── 4. Write updated pool_data.json back to GitHub repo ─────────────────────
 
 print(f"\nWriting updated pool_data.json to repo ({len(newly_eliminated)} new elimination(s))...")
 new_content = base64.b64encode(json.dumps(state, indent=2).encode()).decode()
