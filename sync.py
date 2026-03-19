@@ -7,33 +7,21 @@ import time
 import sys
 
 ANTHROPIC_KEY = os.environ["ANTHROPIC_API_KEY"]
-JSONBIN_KEY   = os.environ["JSONBIN_KEY"]
-JSONBIN_ID    = os.environ["JSONBIN_BIN_ID"]
+NPOINT_ID     = os.environ["NPOINT_ID"]
+NPOINT_URL    = f"https://api.npoint.io/{NPOINT_ID}"
 
-# ── 1. Load current state from JSONBin ──────────────────────────────────────
+# ── 1. Load current state from npoint ───────────────────────────────────────
 
-print("Loading current pool state from JSONBin...")
-req = urllib.request.Request(
-    f"https://api.jsonbin.io/v3/b/{JSONBIN_ID}/latest",
-    headers={
-        "X-Master-Key": JSONBIN_KEY,
-        "X-Access-Key": JSONBIN_KEY
-    }
-)
+print("Loading current pool state from npoint.io...")
 try:
-    with urllib.request.urlopen(req) as resp:
-        data = json.loads(resp.read())
-        state = data["record"]
+    with urllib.request.urlopen(NPOINT_URL) as resp:
+        state = json.loads(resp.read())
         print(f"  Loaded. Eliminated so far: {len(state.get('eliminatedTeams', []))} teams")
 except urllib.error.HTTPError as e:
-    body = e.read().decode()
-    print(f"ERROR loading from JSONBin: HTTP {e.code} {e.reason}")
-    print(f"  Response body: {body}")
-    print(f"  Bin ID used: '{JSONBIN_ID}'")
-    print(f"  Key prefix: '{JSONBIN_KEY[:12]}...'")
+    print(f"ERROR loading from npoint: HTTP {e.code} {e.read().decode()}")
     sys.exit(1)
 except Exception as e:
-    print(f"ERROR loading from JSONBin: {e}")
+    print(f"ERROR loading from npoint: {e}")
     sys.exit(1)
 
 # ── 2. Build list of active assigned teams ───────────────────────────────────
@@ -88,7 +76,7 @@ try:
     with urllib.request.urlopen(req) as resp:
         result = json.loads(resp.read())
 except urllib.error.HTTPError as e:
-    print(f"ERROR calling Anthropic API: {e.code} {e.read()}")
+    print(f"ERROR calling Anthropic API: {e.code} {e.read().decode()}")
     sys.exit(1)
 
 # ── 4. Parse Claude's response ───────────────────────────────────────────────
@@ -111,7 +99,7 @@ print(f"Games found: {parsed.get('games_found', 'unknown')}")
 print(f"Newly eliminated: {newly_eliminated if newly_eliminated else 'none'}")
 
 if not newly_eliminated:
-    print("\nNo new eliminations. JSONBin not updated.")
+    print("\nNo new eliminations. npoint not updated.")
     sys.exit(0)
 
 # ── 5. Update state ──────────────────────────────────────────────────────────
@@ -134,25 +122,25 @@ if not state.get("firstEliminated"):
             print(f"  {p['name']} is first eliminated — consolation prize!")
             break
 
-# ── 6. Save updated state to JSONBin ────────────────────────────────────────
+# ── 6. Save updated state to npoint ─────────────────────────────────────────
 
-print(f"\nSaving updated state to JSONBin ({len(newly_eliminated)} new elimination(s))...")
+print(f"\nSaving updated state to npoint.io ({len(newly_eliminated)} new elimination(s))...")
 payload = json.dumps(state).encode()
 req = urllib.request.Request(
-    f"https://api.jsonbin.io/v3/b/{JSONBIN_ID}",
+    NPOINT_URL,
     data=payload,
-    method="PUT",
-    headers={
-        "Content-Type": "application/json",
-        "X-Master-Key": JSONBIN_KEY
-    }
+    method="POST",
+    headers={"Content-Type": "application/json"}
 )
 try:
     with urllib.request.urlopen(req) as resp:
         print("  Saved successfully.")
         print(f"  Newly eliminated: {', '.join(newly_eliminated)}")
+except urllib.error.HTTPError as e:
+    print(f"ERROR saving to npoint: HTTP {e.code} {e.read().decode()}")
+    sys.exit(1)
 except Exception as e:
-    print(f"ERROR saving to JSONBin: {e}")
+    print(f"ERROR saving to npoint: {e}")
     sys.exit(1)
 
 print("\nSync complete.")
