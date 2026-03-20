@@ -75,6 +75,9 @@ ESPN_NAME_MAP = {
     "Troy Trojans": "Troy",
     "Hawaii Rainbow Warriors": "Hawaii",
     "Hawaiʻi Rainbow Warriors": "Hawaii",
+    "Hawai’i Rainbow Warriors": "Hawaii",
+    "Hawai'i Rainbow Warriors": "Hawaii",
+    "Hawaiʼi Rainbow Warriors": "Hawaii",
     "North Dakota State Bison": "North Dakota State",
     "Penn Quakers": "Penn",
     "Pennsylvania Quakers": "Penn",
@@ -135,13 +138,22 @@ print("\nFetching tournament results from ESPN...")
 newly_eliminated = []
 games_found = 0
 
+def normalise(s):
+    """Normalise special characters for comparison."""
+    return (s.replace('ʻ', "'").replace('’', "'")
+             .replace('ʼ', "'").replace('‘', "'")
+             .replace('“', '"').replace('”', '"'))
+
 def espn_name_to_pool(espn_name):
     """Convert ESPN team name to pool team name."""
-    # Try direct map first
+    # Try direct map first (both raw and normalised)
     if espn_name in ESPN_NAME_MAP:
         return ESPN_NAME_MAP[espn_name]
+    norm = normalise(espn_name)
+    if norm in ESPN_NAME_MAP:
+        return ESPN_NAME_MAP[norm]
     # Try partial match against pool names
-    espn_lower = espn_name.lower()
+    espn_lower = norm.lower()
     for pool_name in all_assigned:
         if pool_name.lower() in espn_lower or espn_lower in pool_name.lower():
             return pool_name
