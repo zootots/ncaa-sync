@@ -180,7 +180,8 @@ try:
 except Exception as e:
     print(f"  Bracket endpoint failed ({e}), trying scoreboard fallback...")
 
-    # Fallback: scrape scoreboard for each date since tournament started
+    # Fallback: fetch scoreboard for each date since tournament started
+    # Use multiple endpoint variations to maximize coverage
     from datetime import date, timedelta
     tournament_start = date(2026, 3, 17)
     today = date.today()
@@ -188,26 +189,48 @@ except Exception as e:
 
     while check_date <= today:
         date_str = check_date.strftime("%Y%m%d")
-        try:
-            url = f"https://site.api.espn.com/apis/site/v2/sports/basketball/mens-college-basketball/scoreboard?groups=100&limit=100&dates={date_str}"
-            data = fetch_url(url)
-            for event in data.get("events", []):
-                status = event.get("status", {}).get("type", {}).get("name", "")
-                if status != "STATUS_FINAL":
-                    continue
-                games_found += 1
-                comp = event.get("competitions", [{}])[0]
-                for team in comp.get("competitors", []):
-                    if team.get("winner") is False:
-                        espn_name = team.get("team", {}).get("displayName", "")
-                        pool_name = espn_name_to_pool(espn_name)
-                        if pool_name and pool_name not in eliminated and pool_name not in newly_eliminated:
-                            newly_eliminated.append(pool_name)
-                            print(f"  Found eliminated: {pool_name} (ESPN: {espn_name})")
-        except Exception as de:
-            print(f"  Skipping {date_str}: {de}")
+        # Try both with and without groups filter, and with calendartype=postseason
+        urls = [
+            f"https://site.api.espn.com/apis/site/v2/sports/basketball/mens-college-basketball/scoreboard?dates={date_str}&limit=100",
+            f"https://site.api.espn.com/apis/site/v2/sports/basketball/mens-college-basketball/scoreboard?dates={date_str}&groups=100&limit=100",
+        ]
+        for url in urls:
+            try:
+                data = fetch_url(url)
+                for event in data.get("events", []):
+                    # Check if this is a tournament game
+                    season_type = event.get("season", {}).get("type", 0)
+                    name = event.get("name", "")
+                    notes = event.get("competitions", [{}])[0].get("notes", [])
+                    note_text = " ".join(n.get("headline", "") for n in notes).lower()
+                    is_tourney = (season_type == 3 or
+                                  "ncaa" in note_text or
+                                  "tournament" in note_text or
+                                  "first round" in note_text or
+                                  "second round" in note_text or
+                                  "sweet 16" in note_text or
+                                  "elite eight" in note_text or
+                                  "final four" in note_text or
+                                  "first four" in note_text)
+                    status = event.get("status", {}).get("type", {}).get("name", "")
+                    if status != "STATUS_FINAL":
+                        continue
+                    games_found += 1
+                    comp = event.get("competitions", [{}])[0]
+                    for team in comp.get("competitors", []):
+                        if team.get("winner") is False:
+                            espn_name = team.get("team", {}).get("displayName", "")
+                            pool_name = espn_name_to_pool(espn_name)
+                            if pool_name and pool_name not in eliminated and pool_name not in newly_eliminated:
+                                newly_eliminated.append(pool_name)
+                                print(f"  Found eliminated: {pool_name} (ESPN: {espn_name})")
+                            elif not pool_name and espn_name:
+                                # Log unmatched names to help diagnose mapping issues
+                                print(f"  Unmatched ESPN name: '{espn_name}'")
+            except Exception as de:
+                print(f"  Skipping {date_str} ({url[-30:]}): {de}")
         check_date += timedelta(days=1)
-        time.sleep(0.3)  # be polite to ESPN's API
+        time.sleep(0.2)
 
     print(f"  Scoreboard fallback: {games_found} completed games across all dates")
 
