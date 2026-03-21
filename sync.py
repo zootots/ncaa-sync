@@ -89,6 +89,8 @@ ESPN_NAME_MAP = {
     "Queens Royals": "Queens",
     "Siena Saints": "Siena",
     "LIU Sharks": "LIU",
+    "Long Island University Sharks": "LIU",
+    "Long Island": "LIU",
     "Howard Bison": "Howard",
     "UMBC Retrievers": "UMBC",
     "Lehigh Mountain Hawks": "Lehigh",
@@ -237,10 +239,11 @@ except Exception as e:
                             pool_name = espn_name_to_pool(espn_name)
                             if pool_name and pool_name not in eliminated and pool_name not in newly_eliminated:
                                 newly_eliminated.append(pool_name)
-                                print(f"  Found eliminated: {pool_name} (ESPN: {espn_name})")
+                                print(f"  Eliminated: {pool_name} (ESPN: {espn_name})")
+                            elif pool_name and pool_name in eliminated:
+                                print(f"  Already eliminated: {pool_name}")
                             elif not pool_name and espn_name:
-                                # Log unmatched names to help diagnose mapping issues
-                                print(f"  Unmatched ESPN name: '{espn_name}'")
+                                print(f"  Unmatched ESPN name: '{espn_name}' — add to ESPN_NAME_MAP if this is a pool team")
             except Exception as de:
                 print(f"  Skipping {date_str} ({url[-30:]}): {de}")
         check_date += timedelta(days=1)
