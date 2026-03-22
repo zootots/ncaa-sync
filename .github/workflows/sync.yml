@@ -3,7 +3,7 @@ name: NCAA Pool Auto-Sync
 on:
   schedule:
     - cron: '0,30 15-23 * * *'
-    - cron: '0,30 0-4 * * *'
+    - cron: '0,30 0-5 * * *'
   workflow_dispatch:
 
 permissions:
