@@ -160,9 +160,11 @@
     "UCLA",
     "Texas Tech",
     "Texas",
-    "Nebraska"
+    "Nebraska",
+    "Arkansas",
+    "Houston"
   ],
-  "gamesPlayed": 108,
-  "firstEliminated": null,
-  "lastSync": "2026-03-27T01:33:20Z"
+  "gamesPlayed": 112,
+  "firstEliminated": "Janice",
+  "lastSync": "2026-03-27T05:24:03Z"
 }
